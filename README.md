@@ -60,9 +60,10 @@ A full example lives in [example.lua](example.lua).
 | Colorpicker | `Section:CreateColorpicker` |
 | Label       | `Section:CreateLabel`   |
 | Paragraph   | `Section:CreateParagraph` |
+| Stat        | `Section:CreateStat`    |
 | Notify      | `Nemesis:Notify`        |
 
-Every interactive element returns an object with `:Set(value)` and `:Get()`.
+Every interactive element returns an object with `:Set(value)` and `:Get()`. Every element accepts an optional `Icon` (unicode glyph or `rbxassetid://...`) and `Description` (muted helper text beneath the row).
 
 ## Mobile
 
