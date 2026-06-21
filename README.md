@@ -78,6 +78,7 @@ Section:CreateSlider({
 | [examples/theming.lua](examples/theming.lua)   | Custom theme override |
 | [examples/rayfield.lua](examples/rayfield.lua) | Rayfield-compatible script |
 | [examples/advanced.lua](examples/advanced.lua) | Palette, watermark, prompts, loading splash, presets |
+| [examples/showcase.lua](examples/showcase.lua) | Every element + every advanced feature, one script |
 
 Run any of them directly:
 
