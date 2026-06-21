@@ -1,6 +1,6 @@
 # Nemesis
 
-A UI library for Roblox executors. Mobile and desktop. Drop-in compatible with Rayfield.
+A UI library for Roblox executors. Mobile and desktop. Drop-in compatible with Rayfield, plus features Rayfield does not have.
 
 ![license](https://img.shields.io/badge/license-MIT-black)
 ![status](https://img.shields.io/badge/status-in_development-black)
@@ -8,7 +8,19 @@ A UI library for Roblox executors. Mobile and desktop. Drop-in compatible with R
 
 ## Status
 
-In development. The library is usable and accepts Rayfield scripts unchanged. Native API may change before v1.0.
+In development. Built with permission from Jenson (Rayfield owner). Accepts Rayfield scripts unchanged. Native API may change before v1.0.
+
+## Beyond Rayfield
+
+- **Command palette** — `Ctrl+K` opens a search overlay across every control in every tab. Pick one to jump and fire it.
+- **Watermark HUD** — `Window:Watermark{...}` floats a draggable bar with FPS, ping, and time.
+- **Theme presets** — `Nemesis:UseTheme("Amethyst")`. Six built-in, themable from the settings flyout.
+- **Modal prompts** — `Window:Prompt{ Title, Content, Actions }` for confirmation dialogs.
+- **Lucide icon names** — `Icon = "home"`, `"settings"`, `"target"` resolve to glyphs without asset IDs.
+- **Animated open** — window scales and fades into view.
+- **Notify actions** — toast notifications can attach action buttons.
+
+Details: [docs/beyond-rayfield.md](docs/beyond-rayfield.md).
 
 ## Rayfield drop-in
 
@@ -65,6 +77,7 @@ Section:CreateSlider({
 | [examples/full.lua](examples/full.lua)         | Every element, configs, multi-select dropdown |
 | [examples/theming.lua](examples/theming.lua)   | Custom theme override |
 | [examples/rayfield.lua](examples/rayfield.lua) | Rayfield-compatible script |
+| [examples/advanced.lua](examples/advanced.lua) | Palette, watermark, prompts, loading splash, presets |
 
 Run any of them directly:
 
