@@ -978,10 +978,19 @@ local function ChangeTheme(Theme)
 	end
 
 	for _, TabPage in ipairs(Elements:GetChildren()) do
-		for _, Element in ipairs(TabPage:GetChildren()) do
-			if Element.ClassName == "Frame" and Element.Name ~= "Placeholder" and Element.Name ~= "SectionSpacing" and Element.Name ~= "Divider" and Element.Name ~= "SectionTitle" and Element.Name ~= "SearchTitle-fsefsefesfsefesfesfThanks" then
-				Element.BackgroundColor3 = SelectedTheme.ElementBackground
-				Element.UIStroke.Color = SelectedTheme.ElementStroke
+		for _, Element in ipairs(TabPage:GetDescendants()) do
+			if Element.ClassName == "Frame" and Element.Name ~= "Placeholder" and Element.Name ~= "SectionSpacing" and Element.Name ~= "Divider" and Element.Name ~= "SectionTitle" and Element.Name ~= "SearchTitle-fsefsefesfsefesfesfThanks" and Element.Name ~= "NemesisColumns" and Element.Name ~= "Left" and Element.Name ~= "Right" then
+				if Element.Name == "NemesisSection" then
+					local s = Element:FindFirstChildOfClass("UIStroke")
+					Element.BackgroundColor3 = SelectedTheme.SecondaryElementBackground
+					if s then s.Color = SelectedTheme.SecondaryElementStroke end
+				else
+					local s = Element:FindFirstChildOfClass("UIStroke")
+					if s then
+						Element.BackgroundColor3 = SelectedTheme.ElementBackground
+						s.Color = SelectedTheme.ElementStroke
+					end
+				end
 			end
 		end
 	end
@@ -2125,6 +2134,92 @@ function RayfieldLibrary:CreateWindow(Settings)
 			Elements.UIPageLayout.Animated = true
 		end
 
+		-- Nemesis CS2: two-column masonry. Sections become container boxes that
+		-- flow into the shorter of two columns; elements nest into the active box.
+		local Columns, LeftCol, RightCol, lLayout, rLayout
+		local activeHolder = nil
+		pcall(function()
+			Columns = Instance.new("Frame")
+			Columns.Name = "NemesisColumns"
+			Columns.BackgroundTransparency = 1
+			Columns.Size = UDim2.new(1, -10, 0, 0)
+			Columns.AutomaticSize = Enum.AutomaticSize.Y
+
+			local cl = Instance.new("UIListLayout", Columns)
+			cl.FillDirection = Enum.FillDirection.Horizontal
+			cl.Padding = UDim.new(0, 10)
+			cl.SortOrder = Enum.SortOrder.LayoutOrder
+			cl.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+			LeftCol = Instance.new("Frame")
+			LeftCol.Name = "Left"
+			LeftCol.BackgroundTransparency = 1
+			LeftCol.Size = UDim2.new(0.5, -5, 0, 0)
+			LeftCol.AutomaticSize = Enum.AutomaticSize.Y
+			LeftCol.LayoutOrder = 1
+			LeftCol.Parent = Columns
+			lLayout = Instance.new("UIListLayout", LeftCol)
+			lLayout.Padding = UDim.new(0, 10)
+			lLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+			RightCol = Instance.new("Frame")
+			RightCol.Name = "Right"
+			RightCol.BackgroundTransparency = 1
+			RightCol.Size = UDim2.new(0.5, -5, 0, 0)
+			RightCol.AutomaticSize = Enum.AutomaticSize.Y
+			RightCol.LayoutOrder = 2
+			RightCol.Parent = Columns
+			rLayout = Instance.new("UIListLayout", RightCol)
+			rLayout.Padding = UDim.new(0, 10)
+			rLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+			Columns.Parent = TabPage
+		end)
+
+		local function shorterColumn()
+			if not (LeftCol and RightCol) then return nil end
+			local lh = lLayout and lLayout.AbsoluteContentSize.Y or 0
+			local rh = rLayout and rLayout.AbsoluteContentSize.Y or 0
+			return (lh <= rh) and LeftCol or RightCol
+		end
+
+		-- Parent an element into the active section box, or fall back to a fresh
+		-- default box, or finally to the raw TabPage (original single-column).
+		local function placeElement(el)
+			if activeHolder and activeHolder.Parent then
+				el.Parent = activeHolder
+				return
+			end
+			local col = shorterColumn()
+			if col then
+				local box = Instance.new("Frame")
+				box.Name = "NemesisSection"
+				box.BackgroundColor3 = SelectedTheme.SecondaryElementBackground
+				box.BackgroundTransparency = 0.2
+				box.BorderSizePixel = 0
+				box.Size = UDim2.new(1, 0, 0, 0)
+				box.AutomaticSize = Enum.AutomaticSize.Y
+				local bc = Instance.new("UICorner", box)
+				bc.CornerRadius = UDim.new(0, 3)
+				local bs = Instance.new("UIStroke", box)
+				bs.Color = SelectedTheme.SecondaryElementStroke
+				bs.Thickness = 1
+				local bp = Instance.new("UIPadding", box)
+				bp.PaddingTop = UDim.new(0, 8)
+				bp.PaddingBottom = UDim.new(0, 8)
+				bp.PaddingLeft = UDim.new(0, 5)
+				bp.PaddingRight = UDim.new(0, 5)
+				local bl = Instance.new("UIListLayout", box)
+				bl.Padding = UDim.new(0, 8)
+				bl.SortOrder = Enum.SortOrder.LayoutOrder
+				box.Parent = col
+				activeHolder = box
+				el.Parent = box
+			else
+				el.Parent = TabPage
+			end
+		end
+
 		TabButton.UIStroke.Color = SelectedTheme.TabStroke
 
 		if Elements.UIPageLayout.CurrentPage == TabPage then
@@ -2196,7 +2291,7 @@ function RayfieldLibrary:CreateWindow(Settings)
 			Button.Name = ButtonSettings.Name
 			Button.Title.Text = ButtonSettings.Name
 			Button.Visible = true
-			Button.Parent = TabPage
+			placeElement(Button)
 
 			Button.BackgroundTransparency = 1
 			Button.UIStroke.Transparency = 1
@@ -2269,7 +2364,7 @@ function RayfieldLibrary:CreateWindow(Settings)
 			ColorPicker.Name = ColorPickerSettings.Name
 			ColorPicker.Title.Text = ColorPickerSettings.Name
 			ColorPicker.Visible = true
-			ColorPicker.Parent = TabPage
+			placeElement(ColorPicker)
 			ColorPicker.Size = UDim2.new(1, -10, 0, 45)
 			Background.Size = UDim2.new(0, 39, 0, 22)
 			Display.BackgroundTransparency = 0
@@ -2519,48 +2614,71 @@ function RayfieldLibrary:CreateWindow(Settings)
 			return ColorPickerSettings
 		end
 
-		-- Section
+		-- Section: a CS2-style container box that following elements nest into.
 		function Tab:CreateSection(SectionName)
 
 			local SectionValue = {}
 
-			if SDone then
-				local SectionSpace = Elements.Template.SectionSpacing:Clone()
-				SectionSpace.Visible = true
-				SectionSpace.Parent = TabPage
+			-- Fallback to original flat behaviour if columns failed to build.
+			if not (LeftCol and RightCol) then
+				local Section = Elements.Template.SectionTitle:Clone()
+				Section.Title.Text = SectionName
+				Section.Visible = true
+				Section.Parent = TabPage
+				Section.Title.TextColor3 = SelectedTheme.Accent or SelectedTheme.TextColor
+				Section.Title.TextTransparency = 1
+				TweenService:Create(Section.Title, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()
+				function SectionValue:Set(NewSection) Section.Title.Text = NewSection end
+				SDone = true
+				return SectionValue
 			end
 
-			local Section = Elements.Template.SectionTitle:Clone()
-			Section.Title.Text = SectionName
-			Section.Visible = true
-			Section.Parent = TabPage
+			local box = Instance.new("Frame")
+			box.Name = "NemesisSection"
+			box.BackgroundColor3 = SelectedTheme.SecondaryElementBackground
+			box.BackgroundTransparency = 1
+			box.BorderSizePixel = 0
+			box.Size = UDim2.new(1, 0, 0, 0)
+			box.AutomaticSize = Enum.AutomaticSize.Y
 
-			-- Nemesis: CS2-style container box overrides on the cloned section title.
-			Section.Size = UDim2.new(1, -10, 0, 26)
-			Section.BackgroundColor3 = SelectedTheme.SecondaryElementBackground
-			Section.BackgroundTransparency = 1
-			Section.BorderSizePixel = 0
+			local boxCorner = Instance.new("UICorner", box)
+			boxCorner.CornerRadius = UDim.new(0, 4)
+			local boxStroke = Instance.new("UIStroke", box)
+			boxStroke.Color = SelectedTheme.SecondaryElementStroke
+			boxStroke.Thickness = 1
+			boxStroke.Transparency = 1
+			boxStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			local boxPad = Instance.new("UIPadding", box)
+			boxPad.PaddingTop = UDim.new(0, 10)
+			boxPad.PaddingBottom = UDim.new(0, 10)
+			boxPad.PaddingLeft = UDim.new(0, 6)
+			boxPad.PaddingRight = UDim.new(0, 6)
+			local boxList = Instance.new("UIListLayout", box)
+			boxList.Padding = UDim.new(0, 8)
+			boxList.SortOrder = Enum.SortOrder.LayoutOrder
 
-			local sectionStroke = Section:FindFirstChildOfClass("UIStroke") or Instance.new("UIStroke", Section)
-			sectionStroke.Color = SelectedTheme.SecondaryElementStroke
-			sectionStroke.Thickness = 1
-			sectionStroke.Transparency = 1
-			sectionStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+			local Title = Instance.new("TextLabel")
+			Title.Name = "SectionHeader"
+			Title.BackgroundTransparency = 1
+			Title.Size = UDim2.new(1, -4, 0, 18)
+			Title.Font = Enum.Font.GothamBold
+			Title.Text = SectionName
+			Title.TextSize = 14
+			Title.TextColor3 = SelectedTheme.Accent or SelectedTheme.TextColor
+			Title.TextXAlignment = Enum.TextXAlignment.Left
+			Title.TextTransparency = 1
+			Title.LayoutOrder = -1
+			Title.Parent = box
 
-			local sectionCorner = Section:FindFirstChildOfClass("UICorner") or Instance.new("UICorner", Section)
-			sectionCorner.CornerRadius = UDim.new(0, 3)
+			box.Parent = shorterColumn()
+			activeHolder = box
 
-			Section.Title.TextSize = 13
-			Section.Title.TextXAlignment = Enum.TextXAlignment.Left
-			Section.Title.TextColor3 = SelectedTheme.Accent or SelectedTheme.TextColor
-
-			Section.Title.TextTransparency = 1
-			TweenService:Create(Section.Title, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()
-			TweenService:Create(Section, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {BackgroundTransparency = 0.2}):Play()
-			TweenService:Create(sectionStroke, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {Transparency = 0}):Play()
+			TweenService:Create(box, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {BackgroundTransparency = 0.2}):Play()
+			TweenService:Create(boxStroke, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {Transparency = 0}):Play()
+			TweenService:Create(Title, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()
 
 			function SectionValue:Set(NewSection)
-				Section.Title.Text = NewSection
+				Title.Text = NewSection
 			end
 
 			SDone = true
@@ -2574,7 +2692,7 @@ function RayfieldLibrary:CreateWindow(Settings)
 
 			local Divider = Elements.Template.Divider:Clone()
 			Divider.Visible = true
-			Divider.Parent = TabPage
+			placeElement(Divider)
 
 			Divider.Divider.BackgroundTransparency = 1
 			TweenService:Create(Divider.Divider, TweenInfo.new(0.5, Enum.EasingStyle.Exponential), {BackgroundTransparency = 0.85}):Play()
@@ -2593,7 +2711,7 @@ function RayfieldLibrary:CreateWindow(Settings)
 			local Label = Elements.Template.Label:Clone()
 			Label.Title.Text = LabelText
 			Label.Visible = true
-			Label.Parent = TabPage
+			placeElement(Label)
 
 			Label.BackgroundColor3 = Color or SelectedTheme.SecondaryElementBackground
 			Label.UIStroke.Color = Color or SelectedTheme.SecondaryElementStroke
@@ -2664,7 +2782,7 @@ function RayfieldLibrary:CreateWindow(Settings)
 			Paragraph.Title.Text = ParagraphSettings.Title
 			Paragraph.Content.Text = ParagraphSettings.Content
 			Paragraph.Visible = true
-			Paragraph.Parent = TabPage
+			placeElement(Paragraph)
 
 			Paragraph.BackgroundTransparency = 1
 			Paragraph.UIStroke.Transparency = 1
@@ -2698,7 +2816,7 @@ function RayfieldLibrary:CreateWindow(Settings)
 			Input.Name = InputSettings.Name
 			Input.Title.Text = InputSettings.Name
 			Input.Visible = true
-			Input.Parent = TabPage
+			placeElement(Input)
 
 			Input.BackgroundTransparency = 1
 			Input.UIStroke.Transparency = 1
@@ -2792,7 +2910,7 @@ function RayfieldLibrary:CreateWindow(Settings)
 			end
 			Dropdown.Title.Text = DropdownSettings.Name
 			Dropdown.Visible = true
-			Dropdown.Parent = TabPage
+			placeElement(Dropdown)
 
 			Dropdown.List.Visible = false
 			if DropdownSettings.CurrentOption then
@@ -3131,7 +3249,7 @@ function RayfieldLibrary:CreateWindow(Settings)
 			Keybind.Name = KeybindSettings.Name
 			Keybind.Title.Text = KeybindSettings.Name
 			Keybind.Visible = true
-			Keybind.Parent = TabPage
+			placeElement(Keybind)
 
 			Keybind.BackgroundTransparency = 1
 			Keybind.UIStroke.Transparency = 1
@@ -3264,7 +3382,7 @@ function RayfieldLibrary:CreateWindow(Settings)
 			Toggle.Name = ToggleSettings.Name
 			Toggle.Title.Text = ToggleSettings.Name
 			Toggle.Visible = true
-			Toggle.Parent = TabPage
+			placeElement(Toggle)
 
 			Toggle.BackgroundTransparency = 1
 			Toggle.UIStroke.Transparency = 1
@@ -3434,7 +3552,7 @@ function RayfieldLibrary:CreateWindow(Settings)
 			Slider.Name = SliderSettings.Name
 			Slider.Title.Text = SliderSettings.Name
 			Slider.Visible = true
-			Slider.Parent = TabPage
+			placeElement(Slider)
 
 			Slider.BackgroundTransparency = 1
 			Slider.UIStroke.Transparency = 1
@@ -3784,16 +3902,23 @@ Main.Search.Input:GetPropertyChangedSignal('Text'):Connect(function()
 		end
 	end
 
-	for _, element in ipairs(Elements.UIPageLayout.CurrentPage:GetChildren()) do
-		if element.ClassName ~= 'UIListLayout' and element.Name ~= 'Placeholder' and element.Name ~= 'SearchTitle-fsefsefesfsefesfesfThanks' then
-			if element.Name == 'SectionTitle' then
-				if #Main.Search.Input.Text == 0 then
-					element.Visible = true
-				else
-					element.Visible = false
-				end
-			else
-				if string.lower(element.Name):find(string.lower(Main.Search.Input.Text), 1, true) then
+	local query = string.lower(Main.Search.Input.Text)
+	local emptyQuery = #Main.Search.Input.Text == 0
+
+	-- Walk both the flat layout and the Nemesis two-column boxes.
+	for _, element in ipairs(Elements.UIPageLayout.CurrentPage:GetDescendants()) do
+		if element.ClassName == 'Frame'
+			and element.Name ~= 'Placeholder'
+			and element.Name ~= 'SearchTitle-fsefsefesfsefesfesfThanks'
+			and element.Name ~= 'NemesisColumns'
+			and element.Name ~= 'Left'
+			and element.Name ~= 'Right' then
+			if element.Name == 'SectionTitle' or element.Name == 'NemesisSection' then
+				-- Section containers stay visible; their elements filter individually.
+				element.Visible = true
+			elseif element:FindFirstChildOfClass('UIStroke') then
+				-- A real element row (has its own stroke). Match against its name.
+				if emptyQuery or string.lower(element.Name):find(query, 1, true) then
 					element.Visible = true
 				else
 					element.Visible = false
