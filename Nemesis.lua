@@ -334,46 +334,47 @@ local RayfieldLibrary = {
 	Flags = {},
 	Theme = {
 		Default = {
-			-- Nemesis: deep charcoal + mono near-white accent.
-			TextColor = Color3.fromRGB(240, 240, 244),
+			-- Nemesis: CS2 dark + purple accent.
+			Accent = Color3.fromRGB(139, 102, 247),
+			TextColor = Color3.fromRGB(235, 235, 242),
 
-			Background = Color3.fromRGB(13, 13, 18),
-			Topbar = Color3.fromRGB(18, 18, 24),
-			Shadow = Color3.fromRGB(6, 6, 9),
+			Background = Color3.fromRGB(10, 10, 14),
+			Topbar = Color3.fromRGB(14, 14, 19),
+			Shadow = Color3.fromRGB(4, 4, 7),
 
-			NotificationBackground = Color3.fromRGB(18, 18, 24),
-			NotificationActionsBackground = Color3.fromRGB(42, 42, 50),
+			NotificationBackground = Color3.fromRGB(14, 14, 19),
+			NotificationActionsBackground = Color3.fromRGB(40, 40, 50),
 
-			TabBackground = Color3.fromRGB(32, 32, 40),
-			TabStroke = Color3.fromRGB(44, 44, 54),
-			TabBackgroundSelected = Color3.fromRGB(229, 229, 234),
-			TabTextColor = Color3.fromRGB(180, 180, 190),
-			SelectedTabTextColor = Color3.fromRGB(18, 18, 24),
+			TabBackground = Color3.fromRGB(18, 18, 24),
+			TabStroke = Color3.fromRGB(30, 30, 40),
+			TabBackgroundSelected = Color3.fromRGB(139, 102, 247),
+			TabTextColor = Color3.fromRGB(150, 150, 165),
+			SelectedTabTextColor = Color3.fromRGB(245, 245, 250),
 
-			ElementBackground = Color3.fromRGB(22, 22, 28),
-			ElementBackgroundHover = Color3.fromRGB(28, 28, 36),
-			SecondaryElementBackground = Color3.fromRGB(18, 18, 24),
-			ElementStroke = Color3.fromRGB(38, 38, 48),
-			SecondaryElementStroke = Color3.fromRGB(32, 32, 40),
+			ElementBackground = Color3.fromRGB(17, 17, 23),
+			ElementBackgroundHover = Color3.fromRGB(23, 23, 31),
+			SecondaryElementBackground = Color3.fromRGB(14, 14, 19),
+			ElementStroke = Color3.fromRGB(30, 30, 40),
+			SecondaryElementStroke = Color3.fromRGB(26, 26, 35),
 
-			SliderBackground = Color3.fromRGB(60, 60, 68),
-			SliderProgress = Color3.fromRGB(229, 229, 234),
-			SliderStroke = Color3.fromRGB(200, 200, 208),
+			SliderBackground = Color3.fromRGB(48, 38, 96),
+			SliderProgress = Color3.fromRGB(139, 102, 247),
+			SliderStroke = Color3.fromRGB(157, 124, 255),
 
-			ToggleBackground = Color3.fromRGB(22, 22, 28),
-			ToggleEnabled = Color3.fromRGB(229, 229, 234),
-			ToggleDisabled = Color3.fromRGB(96, 96, 104),
-			ToggleEnabledStroke = Color3.fromRGB(240, 240, 244),
-			ToggleDisabledStroke = Color3.fromRGB(90, 90, 98),
-			ToggleEnabledOuterStroke = Color3.fromRGB(60, 60, 70),
-			ToggleDisabledOuterStroke = Color3.fromRGB(44, 44, 54),
+			ToggleBackground = Color3.fromRGB(20, 20, 27),
+			ToggleEnabled = Color3.fromRGB(139, 102, 247),
+			ToggleDisabled = Color3.fromRGB(68, 68, 80),
+			ToggleEnabledStroke = Color3.fromRGB(157, 124, 255),
+			ToggleDisabledStroke = Color3.fromRGB(88, 88, 100),
+			ToggleEnabledOuterStroke = Color3.fromRGB(78, 64, 130),
+			ToggleDisabledOuterStroke = Color3.fromRGB(40, 40, 52),
 
-			DropdownSelected = Color3.fromRGB(28, 28, 36),
-			DropdownUnselected = Color3.fromRGB(22, 22, 28),
+			DropdownSelected = Color3.fromRGB(26, 26, 35),
+			DropdownUnselected = Color3.fromRGB(18, 18, 24),
 
-			InputBackground = Color3.fromRGB(22, 22, 28),
-			InputStroke = Color3.fromRGB(50, 50, 60),
-			PlaceholderColor = Color3.fromRGB(110, 110, 120)
+			InputBackground = Color3.fromRGB(17, 17, 23),
+			InputStroke = Color3.fromRGB(44, 44, 56),
+			PlaceholderColor = Color3.fromRGB(108, 108, 122)
 		},
 
 		Ocean = {
@@ -2549,9 +2550,9 @@ function RayfieldLibrary:CreateWindow(Settings)
 			local sectionCorner = Section:FindFirstChildOfClass("UICorner") or Instance.new("UICorner", Section)
 			sectionCorner.CornerRadius = UDim.new(0, 3)
 
-			Section.Title.TextSize = 12
+			Section.Title.TextSize = 13
 			Section.Title.TextXAlignment = Enum.TextXAlignment.Left
-			Section.Title.TextColor3 = SelectedTheme.TextColor
+			Section.Title.TextColor3 = SelectedTheme.Accent or SelectedTheme.TextColor
 
 			Section.Title.TextTransparency = 1
 			TweenService:Create(Section.Title, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()
