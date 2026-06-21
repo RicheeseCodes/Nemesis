@@ -2534,8 +2534,29 @@ function RayfieldLibrary:CreateWindow(Settings)
 			Section.Visible = true
 			Section.Parent = TabPage
 
+			-- Nemesis: CS2-style container box overrides on the cloned section title.
+			Section.Size = UDim2.new(1, -10, 0, 26)
+			Section.BackgroundColor3 = SelectedTheme.SecondaryElementBackground
+			Section.BackgroundTransparency = 1
+			Section.BorderSizePixel = 0
+
+			local sectionStroke = Section:FindFirstChildOfClass("UIStroke") or Instance.new("UIStroke", Section)
+			sectionStroke.Color = SelectedTheme.SecondaryElementStroke
+			sectionStroke.Thickness = 1
+			sectionStroke.Transparency = 1
+			sectionStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+			local sectionCorner = Section:FindFirstChildOfClass("UICorner") or Instance.new("UICorner", Section)
+			sectionCorner.CornerRadius = UDim.new(0, 3)
+
+			Section.Title.TextSize = 12
+			Section.Title.TextXAlignment = Enum.TextXAlignment.Left
+			Section.Title.TextColor3 = SelectedTheme.TextColor
+
 			Section.Title.TextTransparency = 1
-			TweenService:Create(Section.Title, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextTransparency = 0.4}):Play()
+			TweenService:Create(Section.Title, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {TextTransparency = 0}):Play()
+			TweenService:Create(Section, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {BackgroundTransparency = 0.2}):Play()
+			TweenService:Create(sectionStroke, TweenInfo.new(0.7, Enum.EasingStyle.Exponential), {Transparency = 0}):Play()
 
 			function SectionValue:Set(NewSection)
 				Section.Title.Text = NewSection
