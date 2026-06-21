@@ -1,6 +1,6 @@
 # Nemesis
 
-A UI library for Roblox executors. Mobile and desktop.
+A UI library for Roblox executors. Mobile and desktop. Drop-in compatible with Rayfield.
 
 ![license](https://img.shields.io/badge/license-MIT-black)
 ![status](https://img.shields.io/badge/status-in_development-black)
@@ -8,7 +8,22 @@ A UI library for Roblox executors. Mobile and desktop.
 
 ## Status
 
-In development. The library is usable. API may change before v1.0.
+In development. The library is usable and accepts Rayfield scripts unchanged. Native API may change before v1.0.
+
+## Rayfield drop-in
+
+Existing Rayfield scripts work as-is. Replace the loadstring URL with Nemesis and keep the rest of your code. Field mapping and limitations: [docs/rayfield.md](docs/rayfield.md).
+
+```lua
+local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/siriusxcontact/Nemesis/main/Nemesis.lua"))()
+
+local Window = Rayfield:CreateWindow({ Name = "Example", ConfigurationSaving = { Enabled = true, FolderName = "Nemesis/Example", FileName = "Config" } })
+local Tab = Window:CreateTab("Main", 4483362458)
+Tab:CreateSection("Group")
+Tab:CreateToggle({ Name = "On", CurrentValue = false, Flag = "Toggle1", Callback = function(v) end })
+Tab:CreateSlider({ Name = "Speed", Range = { 0, 100 }, Increment = 5, CurrentValue = 50, Flag = "Speed", Callback = function(v) end })
+Rayfield:LoadConfiguration()
+```
 
 ## Install
 
@@ -46,9 +61,10 @@ Section:CreateSlider({
 
 | File | What it shows |
 |------|---------------|
-| [examples/basic.lua](examples/basic.lua)     | Smallest working window |
-| [examples/full.lua](examples/full.lua)       | Every element, configs, multi-select dropdown |
-| [examples/theming.lua](examples/theming.lua) | Custom theme override |
+| [examples/basic.lua](examples/basic.lua)       | Smallest working window |
+| [examples/full.lua](examples/full.lua)         | Every element, configs, multi-select dropdown |
+| [examples/theming.lua](examples/theming.lua)   | Custom theme override |
+| [examples/rayfield.lua](examples/rayfield.lua) | Rayfield-compatible script |
 
 Run any of them directly:
 

@@ -154,6 +154,58 @@ local function setIconColor(inst, color)
     else tween(inst, QUICK, { TextColor3 = color }) end
 end
 
+-- ===== Rayfield-compat normalizers =====
+local function normalize(o, kind)
+    o = o or {}
+    if o.Default == nil then o.Default = o.CurrentValue end
+    o.Placeholder = o.Placeholder or o.PlaceholderText
+    if o.Range then o.Min = o.Min or o.Range[1]; o.Max = o.Max or o.Range[2] end
+    if o.Increment and not o.Step then o.Step = o.Increment end
+    if kind == "Dropdown" then
+        if o.CurrentOption ~= nil and o.Default == nil then
+            if o.MultipleOptions then
+                o.Default = o.CurrentOption
+            elseif type(o.CurrentOption) == "table" then
+                o.Default = o.CurrentOption[1]
+            else
+                o.Default = o.CurrentOption
+            end
+        end
+        if o.MultipleOptions and o.Multi == nil then o.Multi = true end
+    elseif kind == "ColorPicker" then
+        if o.Default == nil then o.Default = o.Color end
+    elseif kind == "Keybind" then
+        local k = o.Default
+        if k == nil then k = o.CurrentKeybind end
+        if type(k) == "string" and Enum.KeyCode[k] then o.Default = Enum.KeyCode[k]
+        elseif typeof(k) == "EnumItem" then o.Default = k end
+    elseif kind == "Paragraph" then
+        o.Text = o.Text or o.Content
+    elseif kind == "Notify" then
+        o.Text = o.Text or o.Content
+        if type(o.Image) == "number" then o.Image = "rbxassetid://" .. tostring(o.Image) end
+    end
+    return o
+end
+
+local _saveDebounce = false
+local function autoSave()
+    if not (Nemesis._configOpts and Nemesis._configOpts.Enabled) then return end
+    if _saveDebounce then return end
+    _saveDebounce = true
+    task.spawn(function()
+        task.wait(0.5)
+        _saveDebounce = false
+        pcall(function() Nemesis:SaveConfiguration() end)
+    end)
+end
+
+local function setFlag(name, value)
+    if not name then return end
+    Nemesis._flags[name] = value
+    autoSave()
+end
+
 -- ===== Config =====
 local function executor()
     return identifyexecutor and identifyexecutor() or "unknown"
@@ -252,6 +304,13 @@ function Nemesis:CreateWindow(opts)
     pcall(function() screen.Parent = getParent() end)
     if not screen.Parent then screen.Parent = LocalPlayer:WaitForChild("PlayerGui") end
     Nemesis._lastScreen = screen
+
+    if opts.ConfigurationSaving then
+        Nemesis._configOpts = opts.ConfigurationSaving
+        if opts.ConfigurationSaving.FolderName then
+            Nemesis:SetConfigFolder(opts.ConfigurationSaving.FolderName)
+        end
+    end
 
     local viewport = workspace.CurrentCamera.ViewportSize
     local isPhone = IsMobile or viewport.X < 600
@@ -505,8 +564,13 @@ function Nemesis:CreateWindow(opts)
     Window._tabs = {}
     Window._isPhone = isPhone
 
-    function Window:CreateTab(tabOpts)
-        tabOpts = tabOpts or {}
+    function Window:CreateTab(arg1, arg2)
+        local tabOpts
+        if type(arg1) == "table" then tabOpts = arg1
+        else tabOpts = { Name = arg1, Icon = arg2 } end
+        if type(tabOpts.Icon) == "number" then
+            tabOpts.Icon = "rbxassetid://" .. tostring(tabOpts.Icon)
+        end
         local Tab = setmetatable({}, { __index = self })
 
         local btn = new("TextButton", {
@@ -585,10 +649,11 @@ function Nemesis:CreateWindow(opts)
         Tab._stack = stack
 
         function Tab:CreateSection(secOpts)
+            if type(secOpts) == "string" then secOpts = { Name = secOpts } end
             secOpts = secOpts or {}
             local Section = {}
 
-            if secOpts.Name then
+            if secOpts.Name and secOpts.Name ~= "" then
                 new("TextLabel", {
                     Text = secOpts.Name,
                     Font = Enum.Font.GothamMedium,
@@ -685,7 +750,7 @@ function Nemesis:CreateWindow(opts)
 
             -- ===== Button =====
             function Section:CreateButton(o)
-                o = o or {}
+                o = normalize(o, "Button")
                 local c, body = card()
                 rowHead(body, o.Icon, o.Name or "Button")
                 description(body, o.Description)
@@ -706,7 +771,7 @@ function Nemesis:CreateWindow(opts)
 
             -- ===== Toggle =====
             function Section:CreateToggle(o)
-                o = o or {}
+                o = normalize(o, "Toggle")
                 local state = o.Default or false
                 local c, body = card()
                 local head = rowHead(body, o.Icon, o.Name or "Toggle")
@@ -749,7 +814,7 @@ function Nemesis:CreateWindow(opts)
                 render()
                 local function setVal(v)
                     state = v; render()
-                    if o.Flag then Nemesis._flags[o.Flag] = state end
+                    setFlag(o.Flag, state)
                     if o.Callback then task.spawn(o.Callback, state) end
                 end
                 bindTap(hit, function() setVal(not state) end)
@@ -759,10 +824,11 @@ function Nemesis:CreateWindow(opts)
 
             -- ===== Slider =====
             function Section:CreateSlider(o)
-                o = o or {}
+                o = normalize(o, "Slider")
                 local min, max = o.Min or 0, o.Max or 100
                 local value = o.Default or min
                 local decimals = o.Decimals or 0
+                local step = o.Step
                 local c, body = card()
                 local head = rowHead(body, o.Icon, o.Name or "Slider")
                 description(body, o.Description)
@@ -796,13 +862,16 @@ function Nemesis:CreateWindow(opts)
 
                 local function setValue(v, fireCb)
                     v = math.clamp(v, min, max)
-                    if decimals == 0 then v = math.floor(v + 0.5)
+                    if step then
+                        v = math.floor((v - min) / step + 0.5) * step + min
+                        v = math.clamp(v, min, max)
+                    elseif decimals == 0 then v = math.floor(v + 0.5)
                     else local m = 10^decimals; v = math.floor(v * m + 0.5) / m end
                     value = v
                     local pct = (v - min) / (max - min)
                     fill.Size = UDim2.fromScale(pct, 1)
                     valLbl.Text = (o.Prefix or "")..tostring(v)..(o.Suffix or "")
-                    if o.Flag then Nemesis._flags[o.Flag] = v end
+                    setFlag(o.Flag, v)
                     if fireCb and o.Callback then task.spawn(o.Callback, v) end
                 end
                 setValue(value, false)
@@ -833,7 +902,7 @@ function Nemesis:CreateWindow(opts)
 
             -- ===== Dropdown =====
             function Section:CreateDropdown(o)
-                o = o or {}
+                o = normalize(o, "Dropdown")
                 local options = o.Options or {}
                 local multi = o.Multi == true
                 local value = o.Default or (multi and {} or options[1])
@@ -959,7 +1028,7 @@ function Nemesis:CreateWindow(opts)
                                 tween(arrow, QUICK, { Rotation = 0 })
                             end
                             refreshLabel()
-                            if o.Flag then Nemesis._flags[o.Flag] = value end
+                            setFlag(o.Flag, value)
                             if o.Callback then task.spawn(o.Callback, value) end
                             rebuild()
                         end)
@@ -997,7 +1066,7 @@ function Nemesis:CreateWindow(opts)
 
             -- ===== Input =====
             function Section:CreateInput(o)
-                o = o or {}
+                o = normalize(o, "Input")
                 local c, body = card()
                 local head = rowHead(body, o.Icon, o.Name or "Input")
                 description(body, o.Description)
@@ -1026,8 +1095,9 @@ function Nemesis:CreateWindow(opts)
                     Parent = pill,
                 })
                 box.FocusLost:Connect(function(enter)
-                    if o.Flag then Nemesis._flags[o.Flag] = box.Text end
+                    setFlag(o.Flag, box.Text)
                     if o.Callback then task.spawn(o.Callback, box.Text, enter) end
+                    if o.RemoveTextAfterFocusLost then box.Text = "" end
                 end)
                 registerFlag(o.Flag, function(v)
                     box.Text = tostring(v)
@@ -1038,9 +1108,10 @@ function Nemesis:CreateWindow(opts)
 
             -- ===== Keybind =====
             function Section:CreateKeybind(o)
-                o = o or {}
+                o = normalize(o, "Keybind")
                 local key = o.Default or Enum.KeyCode.Unknown
                 local listening = false
+                local holdMode = o.HoldToInteract or o.Mode == "Hold"
                 local c, body = card()
                 local head = rowHead(body, o.Icon, o.Name or "Keybind")
                 description(body, o.Description)
@@ -1074,7 +1145,7 @@ function Nemesis:CreateWindow(opts)
                             key = input.KeyCode
                             kbBox.Text = key.Name
                             listening = false
-                            if o.Flag then Nemesis._flags[o.Flag] = key end
+                            setFlag(o.Flag, key)
                             if o.Callback then task.spawn(o.Callback, key) end
                             conn:Disconnect()
                         end
@@ -1083,8 +1154,18 @@ function Nemesis:CreateWindow(opts)
 
                 UserInputService.InputBegan:Connect(function(input, gpe)
                     if gpe or listening then return end
-                    if input.KeyCode == key and o.Callback then task.spawn(o.Callback, key) end
+                    if input.KeyCode == key and o.Callback then
+                        task.spawn(o.Callback, key, holdMode and true or nil)
+                    end
                 end)
+                if holdMode then
+                    UserInputService.InputEnded:Connect(function(input, gpe)
+                        if gpe or listening then return end
+                        if input.KeyCode == key and o.Callback then
+                            task.spawn(o.Callback, key, false)
+                        end
+                    end)
+                end
                 registerFlag(o.Flag, function(k)
                     key = k; kbBox.Text = k.Name
                     if o.Callback then task.spawn(o.Callback, k) end
@@ -1094,7 +1175,7 @@ function Nemesis:CreateWindow(opts)
 
             -- ===== Colorpicker =====
             function Section:CreateColorpicker(o)
-                o = o or {}
+                o = normalize(o, "ColorPicker")
                 local color = o.Default or Color3.fromRGB(255, 255, 255)
                 local open = false
                 local c, body = card()
@@ -1174,7 +1255,7 @@ function Nemesis:CreateWindow(opts)
                     sat.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
                     preview.BackgroundColor3 = color
                     swatch.BackgroundColor3 = color
-                    if o.Flag then Nemesis._flags[o.Flag] = color end
+                    setFlag(o.Flag, color)
                     if o.Callback then task.spawn(o.Callback, color) end
                 end
                 apply()
@@ -1288,9 +1369,10 @@ function Nemesis:CreateWindow(opts)
 
             -- ===== Label =====
             function Section:CreateLabel(o)
+                if type(o) == "string" then o = { Text = o } end
                 o = o or {}
                 local lbl = new("TextLabel", {
-                    Text = o.Text or "",
+                    Text = o.Text or o.Content or "",
                     Font = Enum.Font.Gotham,
                     TextSize = 12,
                     TextColor3 = Nemesis._theme.Muted,
@@ -1307,7 +1389,7 @@ function Nemesis:CreateWindow(opts)
 
             -- ===== Paragraph =====
             function Section:CreateParagraph(o)
-                o = o or {}
+                o = normalize(o, "Paragraph")
                 local c = new("Frame", {
                     Size = UDim2.new(1, 0, 0, 0),
                     AutomaticSize = Enum.AutomaticSize.Y,
@@ -1348,8 +1430,28 @@ function Nemesis:CreateWindow(opts)
                 }
             end
 
+            Section.CreateColorPicker = Section.CreateColorpicker
+            Tab._activeSection = Section
             return Section
         end
+
+        local function proxy(name)
+            return function(self, opts)
+                local sec = self._activeSection or self:CreateSection("")
+                return sec[name](sec, opts)
+            end
+        end
+        Tab.CreateButton      = proxy("CreateButton")
+        Tab.CreateToggle      = proxy("CreateToggle")
+        Tab.CreateSlider      = proxy("CreateSlider")
+        Tab.CreateDropdown    = proxy("CreateDropdown")
+        Tab.CreateInput       = proxy("CreateInput")
+        Tab.CreateKeybind     = proxy("CreateKeybind")
+        Tab.CreateColorpicker = proxy("CreateColorpicker")
+        Tab.CreateColorPicker = Tab.CreateColorpicker
+        Tab.CreateStat        = proxy("CreateStat")
+        Tab.CreateLabel       = proxy("CreateLabel")
+        Tab.CreateParagraph   = proxy("CreateParagraph")
 
         table.insert(Window._tabs, Tab)
         if #Window._tabs == 1 then activate() end
@@ -1436,7 +1538,7 @@ end
 -- ===== Notify =====
 local notifyHolder
 function Nemesis:Notify(opts)
-    opts = opts or {}
+    opts = normalize(opts, "Notify")
     local parent = self._lastScreen
     if not parent then return end
     if not notifyHolder or notifyHolder.Parent ~= parent then
@@ -1444,7 +1546,7 @@ function Nemesis:Notify(opts)
             Name = "NotifyHolder",
             AnchorPoint = Vector2.new(1, 1),
             Position = UDim2.new(1, -16, 1, -16),
-            Size = UDim2.new(0, 300, 1, -32),
+            Size = UDim2.new(0, 320, 1, -32),
             BackgroundTransparency = 1,
             Parent = parent,
         })
@@ -1456,8 +1558,9 @@ function Nemesis:Notify(opts)
             Parent = notifyHolder,
         })
     end
+    local hasActions = opts.Actions and next(opts.Actions) ~= nil
     local n = new("Frame", {
-        Size = UDim2.new(1, 0, 0, 60),
+        Size = UDim2.new(1, 0, 0, hasActions and 96 or 64),
         BackgroundColor3 = self._theme.Surface,
         BorderSizePixel = 0,
         Parent = notifyHolder,
@@ -1465,12 +1568,25 @@ function Nemesis:Notify(opts)
     corner(n, 12)
     stroke(n, self._theme.Border, 1, 0.4)
     new("Frame", {
-        Size = UDim2.new(0, 3, 1, -16),
-        Position = UDim2.new(0, 8, 0, 8),
+        Size = UDim2.new(0, 3, 0, 40),
+        Position = UDim2.new(0, 8, 0, 12),
         BackgroundColor3 = self._theme.Accent,
         BorderSizePixel = 0,
         Parent = n,
     })
+    local leftPad = 20
+    if opts.Image then
+        local img = new("ImageLabel", {
+            Image = opts.Image,
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 18, 0, 14),
+            Size = UDim2.fromOffset(28, 28),
+            ImageColor3 = self._theme.Accent,
+            Parent = n,
+        })
+        corner(img, 6)
+        leftPad = 56
+    end
     new("TextLabel", {
         Text = opts.Title or "",
         Font = Enum.Font.GothamBold,
@@ -1478,8 +1594,8 @@ function Nemesis:Notify(opts)
         TextColor3 = self._theme.Text,
         TextXAlignment = Enum.TextXAlignment.Left,
         BackgroundTransparency = 1,
-        Position = UDim2.new(0, 20, 0, 8),
-        Size = UDim2.new(1, -28, 0, 18),
+        Position = UDim2.new(0, leftPad, 0, 10),
+        Size = UDim2.new(1, -leftPad - 12, 0, 18),
         Parent = n,
     })
     new("TextLabel", {
@@ -1491,18 +1607,52 @@ function Nemesis:Notify(opts)
         TextYAlignment = Enum.TextYAlignment.Top,
         TextWrapped = true,
         BackgroundTransparency = 1,
-        Position = UDim2.new(0, 20, 0, 28),
-        Size = UDim2.new(1, -28, 0, 28),
+        Position = UDim2.new(0, leftPad, 0, 30),
+        Size = UDim2.new(1, -leftPad - 12, 0, hasActions and 22 or 28),
         Parent = n,
     })
+    if hasActions then
+        local row = new("Frame", {
+            Position = UDim2.new(0, leftPad, 1, -30),
+            Size = UDim2.new(1, -leftPad - 12, 0, 24),
+            BackgroundTransparency = 1,
+            Parent = n,
+        })
+        new("UIListLayout", {
+            FillDirection = Enum.FillDirection.Horizontal,
+            HorizontalAlignment = Enum.HorizontalAlignment.Right,
+            Padding = UDim.new(0, 6),
+            Parent = row,
+        })
+        for _, action in pairs(opts.Actions) do
+            local b = new("TextButton", {
+                Text = action.Name or "OK",
+                Font = Enum.Font.GothamMedium,
+                TextSize = 12,
+                TextColor3 = self._theme.Text,
+                BackgroundColor3 = self._theme.Surface2,
+                AutoButtonColor = false,
+                Size = UDim2.fromOffset(72, 24),
+                Parent = row,
+            })
+            corner(b, 6)
+            stroke(b, self._theme.Border, 1, 0.4)
+            bindTap(b, function()
+                if action.Callback then task.spawn(action.Callback) end
+                n:Destroy()
+            end)
+        end
+    end
     task.delay(opts.Duration or 3, function()
+        if not n.Parent then return end
         tween(n, SMOOTH, { BackgroundTransparency = 1 })
         for _, d in ipairs(n:GetDescendants()) do
             if d:IsA("TextLabel") then tween(d, SMOOTH, { TextTransparency = 1 }) end
             if d:IsA("UIStroke") then tween(d, SMOOTH, { Transparency = 1 }) end
+            if d:IsA("ImageLabel") then tween(d, SMOOTH, { ImageTransparency = 1 }) end
         end
         task.wait(0.3)
-        n:Destroy()
+        if n.Parent then n:Destroy() end
     end)
 end
 
@@ -1512,6 +1662,18 @@ end
 
 function Nemesis:GetFlag(name)
     return self._flags[name]
+end
+
+function Nemesis:LoadConfiguration()
+    local cfg = self._configOpts
+    if not cfg or not cfg.Enabled then return false, "configuration saving disabled" end
+    return self:LoadConfig(cfg.FileName or "config")
+end
+
+function Nemesis:SaveConfiguration()
+    local cfg = self._configOpts
+    if not cfg or not cfg.Enabled then return false, "configuration saving disabled" end
+    return self:SaveConfig(cfg.FileName or "config")
 end
 
 return Nemesis
