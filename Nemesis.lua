@@ -1,5 +1,5 @@
 --[[
-    Nemesis UI v0.2
+    Nemesis UI v0.3
     A UI library for Roblox executors. Mobile and desktop.
     https://github.com/siriusxcontact/Nemesis
 ]]
@@ -7,6 +7,7 @@
 local Nemesis = {}
 Nemesis.__index = Nemesis
 Nemesis._flags = {}
+Nemesis._configFolder = "Nemesis"
 Nemesis._theme = {
     Background = Color3.fromRGB(18, 18, 22),
     Surface    = Color3.fromRGB(26, 26, 32),
@@ -22,6 +23,7 @@ Nemesis._theme = {
 
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 
 local LocalPlayer = Players.LocalPlayer
@@ -146,6 +148,95 @@ local function iconNode(parent, icon, size, color)
     })
 end
 
+local function setIconColor(inst, color)
+    if not inst then return end
+    if inst:IsA("ImageLabel") then tween(inst, QUICK, { ImageColor3 = color })
+    else tween(inst, QUICK, { TextColor3 = color }) end
+end
+
+-- ===== Config =====
+local function executor()
+    return identifyexecutor and identifyexecutor() or "unknown"
+end
+
+local function writeFile(path, data)
+    if writefile then return pcall(writefile, path, data) end
+    return false, "writefile unavailable"
+end
+local function readFile(path)
+    if readfile and isfile and isfile(path) then return readfile(path) end
+end
+local function listFiles(folder)
+    if listfiles then return listfiles(folder) end
+    return {}
+end
+local function makeFolder(folder)
+    if makefolder and isfolder and not isfolder(folder) then makefolder(folder) end
+end
+
+function Nemesis:SetConfigFolder(name)
+    self._configFolder = name
+    makeFolder(name)
+end
+
+function Nemesis:SaveConfig(name)
+    makeFolder(self._configFolder)
+    local serialized = {}
+    for k, v in pairs(self._flags) do
+        if typeof(v) == "Color3" then
+            serialized[k] = { __t = "Color3", r = v.R, g = v.G, b = v.B }
+        elseif typeof(v) == "EnumItem" then
+            serialized[k] = { __t = "Enum", n = tostring(v) }
+        elseif type(v) == "table" or type(v) == "number" or type(v) == "boolean" or type(v) == "string" then
+            serialized[k] = v
+        end
+    end
+    local ok, encoded = pcall(HttpService.JSONEncode, HttpService, serialized)
+    if not ok then return false, encoded end
+    return writeFile(self._configFolder .. "/" .. name .. ".json", encoded)
+end
+
+function Nemesis:LoadConfig(name)
+    local raw = readFile(self._configFolder .. "/" .. name .. ".json")
+    if not raw then return false, "missing" end
+    local ok, decoded = pcall(HttpService.JSONDecode, HttpService, raw)
+    if not ok then return false, decoded end
+    for k, v in pairs(decoded) do
+        if type(v) == "table" and v.__t == "Color3" then
+            self._flags[k] = Color3.new(v.r, v.g, v.b)
+        elseif type(v) == "table" and v.__t == "Enum" then
+            local segs = string.split(v.n, ".")
+            if segs[1] == "Enum" and segs[2] and segs[3] then
+                local enumType = Enum[segs[2]]
+                local item = enumType and enumType[segs[3]]
+                if item then self._flags[k] = item end
+            end
+        else
+            self._flags[k] = v
+        end
+        if self._setters and self._setters[k] then
+            pcall(self._setters[k], self._flags[k])
+        end
+    end
+    return true
+end
+
+function Nemesis:ListConfigs()
+    local out = {}
+    for _, p in ipairs(listFiles(self._configFolder)) do
+        local name = p:match("([^/\\]+)%.json$")
+        if name then table.insert(out, name) end
+    end
+    return out
+end
+
+Nemesis._setters = {}
+local function registerFlag(flag, setter, value)
+    if not flag then return end
+    Nemesis._flags[flag] = value
+    Nemesis._setters[flag] = setter
+end
+
 -- ===== Window =====
 function Nemesis:CreateWindow(opts)
     opts = opts or {}
@@ -164,8 +255,8 @@ function Nemesis:CreateWindow(opts)
 
     local viewport = workspace.CurrentCamera.ViewportSize
     local isPhone = IsMobile or viewport.X < 600
-    local defaultW = isPhone and math.min(viewport.X - 24, 480) or 560
-    local defaultH = isPhone and math.min(viewport.Y - 100, 520) or 480
+    local defaultW = isPhone and math.min(viewport.X - 24, 480) or 580
+    local defaultH = isPhone and math.min(viewport.Y - 100, 540) or 480
 
     local main = new("Frame", {
         Name = "Main",
@@ -212,7 +303,7 @@ function Nemesis:CreateWindow(opts)
         })
     end
 
-    -- Header action icons (search, settings, minimize, close)
+    -- Header action icons
     local actions = new("Frame", {
         Name = "Actions",
         AnchorPoint = Vector2.new(1, 0),
@@ -246,13 +337,12 @@ function Nemesis:CreateWindow(opts)
         return b
     end
 
-    local searchBtn = actionBtn("\u{2315}", 1)
     local settingsBtn = actionBtn("\u{2699}", 2)
     local minBtn = actionBtn("\u{2212}", 3)
     local closeBtn = actionBtn("\u{2715}", 4)
 
     -- Divider
-    local divider = new("Frame", {
+    new("Frame", {
         Size = UDim2.new(1, -32, 0, 1),
         Position = UDim2.new(0, 16, 0, 56),
         BackgroundColor3 = Nemesis._theme.Border,
@@ -261,7 +351,7 @@ function Nemesis:CreateWindow(opts)
         Parent = main,
     })
 
-    -- Tab bar (horizontal)
+    -- Tab bar
     local tabBar = new("ScrollingFrame", {
         Name = "TabBar",
         Position = UDim2.new(0, 0, 0, 62),
@@ -291,7 +381,7 @@ function Nemesis:CreateWindow(opts)
         Parent = main,
     })
 
-    -- iOS-style handle indicator
+    -- iOS handle
     if isPhone then
         local handle = new("Frame", {
             AnchorPoint = Vector2.new(0.5, 1),
@@ -307,24 +397,65 @@ function Nemesis:CreateWindow(opts)
 
     makeDraggable(main, header)
 
-    -- Minimize: collapse to just the header bar
+    -- Desktop resize grip
+    if not isPhone then
+        local grip = new("ImageButton", {
+            AnchorPoint = Vector2.new(1, 1),
+            Position = UDim2.new(1, -4, 1, -4),
+            Size = UDim2.fromOffset(16, 16),
+            BackgroundTransparency = 1,
+            Image = "",
+            AutoButtonColor = false,
+            Parent = main,
+        })
+        for i = 0, 2 do
+            new("Frame", {
+                AnchorPoint = Vector2.new(1, 1),
+                Position = UDim2.new(1, -i*4, 1, 0),
+                Size = UDim2.fromOffset(2, 2 + i*4),
+                BackgroundColor3 = Nemesis._theme.Soft,
+                BorderSizePixel = 0,
+                Parent = grip,
+            })
+        end
+        local resizing, startSize, startInput
+        grip.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                resizing = true; startSize = main.AbsoluteSize; startInput = i.Position
+            end
+        end)
+        grip.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                resizing = false
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(i)
+            if resizing and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+                local d = i.Position - startInput
+                local w = math.clamp(startSize.X + d.X, 380, viewport.X - 32)
+                local h = math.clamp(startSize.Y + d.Y, 280, viewport.Y - 32)
+                main.Size = UDim2.fromOffset(w, h)
+            end
+        end)
+    end
+
+    -- Minimize
     local minimized = false
-    local fullSize = main.Size
+    local restoreSize
     bindTap(minBtn, function()
-        minimized = not minimized
-        if minimized then
-            tween(main, SMOOTH, { Size = UDim2.fromOffset(fullSize.X.Offset, 56) })
+        if not minimized then
+            restoreSize = main.Size
+            minimized = true
+            tween(main, SMOOTH, { Size = UDim2.fromOffset(main.AbsoluteSize.X, 56) })
         else
-            tween(main, SMOOTH, { Size = fullSize })
+            minimized = false
+            tween(main, SMOOTH, { Size = restoreSize })
         end
     end)
 
-    bindTap(closeBtn, function()
-        tween(main, SMOOTH, { Size = UDim2.fromOffset(0, 0) })
-        task.delay(0.3, function() main.Visible = false; main.Size = fullSize end)
-    end)
+    bindTap(closeBtn, function() main.Visible = false end)
 
-    -- Mobile toggle pill
+    -- Mobile pill
     local mobileBtn
     if isPhone or opts.MobileButton then
         mobileBtn = new("TextButton", {
@@ -339,6 +470,7 @@ function Nemesis:CreateWindow(opts)
             Parent = screen,
         })
         corner(mobileBtn, 24)
+        stroke(mobileBtn, Color3.new(1, 1, 1), 0, 1)
         makeDraggable(mobileBtn)
         local moved, pressStart = false, nil
         mobileBtn.InputBegan:Connect(function(i)
@@ -377,7 +509,6 @@ function Nemesis:CreateWindow(opts)
         tabOpts = tabOpts or {}
         local Tab = setmetatable({}, { __index = self })
 
-        -- Tab button
         local btn = new("TextButton", {
             Text = "",
             BackgroundTransparency = 1,
@@ -413,7 +544,6 @@ function Nemesis:CreateWindow(opts)
             Parent = inner,
         })
 
-        -- Page
         local page = new("ScrollingFrame", {
             Size = UDim2.fromScale(1, 1),
             BackgroundTransparency = 1,
@@ -440,11 +570,11 @@ function Nemesis:CreateWindow(opts)
             for _, t in ipairs(Window._tabs) do
                 t._page.Visible = false
                 tween(t._lbl, QUICK, { TextColor3 = Nemesis._theme.Muted })
-                if t._icon then tween(t._icon, QUICK, { ImageColor3 = Nemesis._theme.Muted, TextColor3 = Nemesis._theme.Muted }) end
+                setIconColor(t._icon, Nemesis._theme.Muted)
             end
             page.Visible = true
             tween(tabLbl, QUICK, { TextColor3 = Nemesis._theme.Text })
-            if tabIcon then tween(tabIcon, QUICK, tabIcon:IsA("ImageLabel") and { ImageColor3 = Nemesis._theme.Text } or { TextColor3 = Nemesis._theme.Text }) end
+            setIconColor(tabIcon, Nemesis._theme.Text)
         end
         bindTap(btn, activate)
 
@@ -479,32 +609,38 @@ function Nemesis:CreateWindow(opts)
             })
             listLayout(group, 8)
 
-            -- ===== Card primitive =====
-            local function card(height, hasDescription)
+            local function card()
                 local c = new("Frame", {
-                    Size = UDim2.new(1, 0, 0, height or 56),
-                    AutomaticSize = hasDescription and Enum.AutomaticSize.Y or Enum.AutomaticSize.None,
+                    Size = UDim2.new(1, 0, 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.Y,
                     BackgroundColor3 = Nemesis._theme.Surface,
                     BorderSizePixel = 0,
                     Parent = group,
                 })
                 corner(c, 12)
                 stroke(c, Nemesis._theme.Border, 1, 0.5)
-                return c
+                local body = new("Frame", {
+                    Size = UDim2.new(1, 0, 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    BackgroundTransparency = 1,
+                    Parent = c,
+                })
+                listLayout(body, 0)
+                return c, body
             end
 
-            local function rowHead(parent, icon, name)
-                local head = new("Frame", {
+            local function rowHead(parent, icon, name, height)
+                local h = new("Frame", {
                     BackgroundTransparency = 1,
-                    Position = UDim2.new(0, 0, 0, 0),
-                    Size = UDim2.new(1, 0, 0, 56),
+                    Size = UDim2.new(1, 0, 0, height or 56),
                     Parent = parent,
+                    LayoutOrder = 1,
                 })
                 local left = new("Frame", {
                     BackgroundTransparency = 1,
                     Position = UDim2.new(0, 18, 0, 0),
-                    Size = UDim2.new(0.6, -18, 1, 0),
-                    Parent = head,
+                    Size = UDim2.new(0.55, -18, 1, 0),
+                    Parent = h,
                 })
                 new("UIListLayout", {
                     FillDirection = Enum.FillDirection.Horizontal,
@@ -525,11 +661,11 @@ function Nemesis:CreateWindow(opts)
                     AutomaticSize = Enum.AutomaticSize.X,
                     Parent = left,
                 })
-                return head
+                return h
             end
 
-            local function descriptionBlock(parent, text)
-                if not text or text == "" then return nil end
+            local function description(parent, text)
+                if not text or text == "" then return end
                 local d = new("TextLabel", {
                     Text = text,
                     Font = Enum.Font.Gotham,
@@ -539,21 +675,20 @@ function Nemesis:CreateWindow(opts)
                     TextYAlignment = Enum.TextYAlignment.Top,
                     TextWrapped = true,
                     BackgroundTransparency = 1,
-                    Position = UDim2.new(0, 18, 0, 56),
-                    Size = UDim2.new(1, -36, 0, 0),
+                    Size = UDim2.new(1, 0, 0, 0),
                     AutomaticSize = Enum.AutomaticSize.Y,
                     Parent = parent,
+                    LayoutOrder = 2,
                 })
-                padding(parent, 0, 0, 14, 0)
-                return d
+                padding(d, 0, 18, 14, 18)
             end
 
             -- ===== Button =====
             function Section:CreateButton(o)
                 o = o or {}
-                local c = card(56, o.Description ~= nil)
-                rowHead(c, o.Icon, o.Name or "Button")
-                descriptionBlock(c, o.Description)
+                local c, body = card()
+                rowHead(body, o.Icon, o.Name or "Button")
+                description(body, o.Description)
                 local hit = new("TextButton", {
                     Text = "",
                     BackgroundTransparency = 1,
@@ -563,7 +698,7 @@ function Nemesis:CreateWindow(opts)
                 })
                 bindTap(hit, function()
                     tween(c, QUICK, { BackgroundColor3 = Nemesis._theme.Surface2 })
-                    task.delay(0.1, function() tween(c, QUICK, { BackgroundColor3 = Nemesis._theme.Surface }) end)
+                    task.delay(0.12, function() tween(c, QUICK, { BackgroundColor3 = Nemesis._theme.Surface }) end)
                     if o.Callback then task.spawn(o.Callback) end
                 end)
                 return { Set = function() end }
@@ -573,16 +708,17 @@ function Nemesis:CreateWindow(opts)
             function Section:CreateToggle(o)
                 o = o or {}
                 local state = o.Default or false
-                local c = card(56, o.Description ~= nil)
-                rowHead(c, o.Icon, o.Name or "Toggle")
-                descriptionBlock(c, o.Description)
+                local c, body = card()
+                local head = rowHead(body, o.Icon, o.Name or "Toggle")
+                description(body, o.Description)
 
                 local pill = new("Frame", {
+                    AnchorPoint = Vector2.new(1, 0.5),
                     Size = UDim2.fromOffset(40, 22),
-                    Position = UDim2.new(1, -58, 0, 17),
+                    Position = UDim2.new(1, -18, 0.5, 0),
                     BackgroundColor3 = Nemesis._theme.Surface2,
                     BorderSizePixel = 0,
-                    Parent = c,
+                    Parent = head,
                 })
                 corner(pill, 11)
                 stroke(pill, Nemesis._theme.Border, 1, 0.4)
@@ -596,11 +732,9 @@ function Nemesis:CreateWindow(opts)
                 corner(dot, 8)
 
                 local hit = new("TextButton", {
-                    Text = "",
-                    BackgroundTransparency = 1,
+                    Text = "", BackgroundTransparency = 1,
                     Size = UDim2.new(1, 0, 0, 56),
-                    Parent = c,
-                    ZIndex = 2,
+                    Parent = c, ZIndex = 2,
                 })
 
                 local function render()
@@ -613,17 +747,14 @@ function Nemesis:CreateWindow(opts)
                     end
                 end
                 render()
-                bindTap(hit, function()
-                    state = not state
-                    render()
+                local function setVal(v)
+                    state = v; render()
                     if o.Flag then Nemesis._flags[o.Flag] = state end
                     if o.Callback then task.spawn(o.Callback, state) end
-                end)
-                if o.Flag then Nemesis._flags[o.Flag] = state end
-                return {
-                    Set = function(v) state = v; render(); if o.Callback then task.spawn(o.Callback, state) end end,
-                    Get = function() return state end,
-                }
+                end
+                bindTap(hit, function() setVal(not state) end)
+                registerFlag(o.Flag, setVal, state)
+                return { Set = setVal, Get = function() return state end }
             end
 
             -- ===== Slider =====
@@ -632,16 +763,17 @@ function Nemesis:CreateWindow(opts)
                 local min, max = o.Min or 0, o.Max or 100
                 local value = o.Default or min
                 local decimals = o.Decimals or 0
-                local c = card(56, o.Description ~= nil)
-                rowHead(c, o.Icon, o.Name or "Slider")
-                descriptionBlock(c, o.Description)
+                local c, body = card()
+                local head = rowHead(body, o.Icon, o.Name or "Slider")
+                description(body, o.Description)
 
                 local pill = new("Frame", {
+                    AnchorPoint = Vector2.new(1, 0.5),
                     Size = UDim2.fromOffset(150, 28),
-                    Position = UDim2.new(1, -168, 0, 14),
+                    Position = UDim2.new(1, -18, 0.5, 0),
                     BackgroundColor3 = Nemesis._theme.Surface2,
                     BorderSizePixel = 0,
-                    Parent = c,
+                    Parent = head,
                 })
                 corner(pill, 14)
                 stroke(pill, Nemesis._theme.Border, 1, 0.4)
@@ -659,8 +791,7 @@ function Nemesis:CreateWindow(opts)
                     TextColor3 = Nemesis._theme.Text,
                     BackgroundTransparency = 1,
                     Size = UDim2.fromScale(1, 1),
-                    Parent = pill,
-                    ZIndex = 2,
+                    Parent = pill, ZIndex = 2,
                 })
 
                 local function setValue(v, fireCb)
@@ -675,6 +806,7 @@ function Nemesis:CreateWindow(opts)
                     if fireCb and o.Callback then task.spawn(o.Callback, v) end
                 end
                 setValue(value, false)
+                registerFlag(o.Flag, function(v) setValue(v, true) end, value)
 
                 local dragging = false
                 local function update(input)
@@ -703,24 +835,25 @@ function Nemesis:CreateWindow(opts)
             function Section:CreateDropdown(o)
                 o = o or {}
                 local options = o.Options or {}
-                local value = o.Default or options[1]
+                local multi = o.Multi == true
+                local value = o.Default or (multi and {} or options[1])
                 local open = false
-                local c = card(56, o.Description ~= nil)
-                rowHead(c, o.Icon, o.Name or "Dropdown")
-                descriptionBlock(c, o.Description)
-                c.ClipsDescendants = true
+                local c, body = card()
+                local head = rowHead(body, o.Icon, o.Name or "Dropdown")
+                description(body, o.Description)
 
                 local pill = new("Frame", {
-                    Size = UDim2.fromOffset(120, 28),
-                    Position = UDim2.new(1, -138, 0, 14),
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Size = UDim2.fromOffset(140, 28),
+                    Position = UDim2.new(1, -18, 0.5, 0),
                     BackgroundColor3 = Nemesis._theme.Surface2,
                     BorderSizePixel = 0,
-                    Parent = c,
+                    Parent = head,
                 })
                 corner(pill, 14)
                 stroke(pill, Nemesis._theme.Border, 1, 0.4)
                 local valLbl = new("TextLabel", {
-                    Text = tostring(value or ""),
+                    Text = multi and ("("..#value..")") or tostring(value or ""),
                     Font = Enum.Font.GothamMedium,
                     TextSize = 13,
                     TextColor3 = Nemesis._theme.Text,
@@ -742,24 +875,48 @@ function Nemesis:CreateWindow(opts)
                     Parent = pill,
                 })
 
-                local list = new("Frame", {
-                    Size = UDim2.new(1, -36, 0, 0),
-                    AutomaticSize = Enum.AutomaticSize.Y,
-                    Position = UDim2.new(0, 18, 0, 60),
+                local listHolder = new("Frame", {
                     BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    Parent = body,
                     Visible = false,
-                    Parent = c,
+                    LayoutOrder = 10,
+                })
+                padding(listHolder, 0, 18, 14, 18)
+                local list = new("Frame", {
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    Parent = listHolder,
                 })
                 listLayout(list, 4)
+
+                local function isSelected(opt)
+                    if multi then
+                        for _, v in ipairs(value) do if v == opt then return true end end
+                        return false
+                    end
+                    return value == opt
+                end
+
+                local function refreshLabel()
+                    if multi then
+                        valLbl.Text = #value == 0 and "None" or ("("..#value..")")
+                    else
+                        valLbl.Text = tostring(value or "")
+                    end
+                end
 
                 local function rebuild()
                     for _, ch in ipairs(list:GetChildren()) do
                         if ch:IsA("TextButton") then ch:Destroy() end
                     end
                     for _, opt in ipairs(options) do
+                        local sel = isSelected(opt)
                         local item = new("TextButton", {
                             Text = "",
-                            BackgroundColor3 = (opt == value) and Nemesis._theme.AccentDim or Nemesis._theme.Surface2,
+                            BackgroundColor3 = sel and Nemesis._theme.AccentDim or Nemesis._theme.Surface2,
                             AutoButtonColor = false,
                             Size = UDim2.new(1, 0, 0, 30),
                             Parent = list,
@@ -776,48 +933,64 @@ function Nemesis:CreateWindow(opts)
                             Size = UDim2.new(1, -24, 1, 0),
                             Parent = item,
                         })
+                        if sel and multi then
+                            new("TextLabel", {
+                                Text = "\u{2713}",
+                                Font = Enum.Font.GothamBold,
+                                TextSize = 13,
+                                TextColor3 = Color3.new(1, 1, 1),
+                                BackgroundTransparency = 1,
+                                Position = UDim2.new(1, -24, 0, 0),
+                                Size = UDim2.fromOffset(16, 30),
+                                Parent = item,
+                            })
+                        end
                         bindTap(item, function()
-                            value = opt
-                            valLbl.Text = tostring(opt)
+                            if multi then
+                                local removed = false
+                                for i, v in ipairs(value) do
+                                    if v == opt then table.remove(value, i); removed = true; break end
+                                end
+                                if not removed then table.insert(value, opt) end
+                            else
+                                value = opt
+                                open = false
+                                listHolder.Visible = false
+                                tween(arrow, QUICK, { Rotation = 0 })
+                            end
+                            refreshLabel()
                             if o.Flag then Nemesis._flags[o.Flag] = value end
                             if o.Callback then task.spawn(o.Callback, value) end
-                            open = false
-                            tween(c, SMOOTH, { Size = UDim2.new(1, 0, 0, 56) })
-                            list.Visible = false
                             rebuild()
                         end)
                     end
                 end
                 rebuild()
-                if o.Flag then Nemesis._flags[o.Flag] = value end
+                refreshLabel()
+                registerFlag(o.Flag, function(v)
+                    value = v; refreshLabel(); rebuild()
+                    if o.Callback then task.spawn(o.Callback, v) end
+                end, value)
 
                 local hit = new("TextButton", {
-                    Text = "",
-                    BackgroundTransparency = 1,
+                    Text = "", BackgroundTransparency = 1,
                     Size = UDim2.new(1, 0, 0, 56),
-                    Parent = c,
-                    ZIndex = 2,
+                    Parent = c, ZIndex = 2,
                 })
                 bindTap(hit, function()
                     open = not open
-                    list.Visible = open
-                    if open then
-                        task.wait()
-                        local h = 56 + list.AbsoluteSize.Y + 14
-                        tween(c, SMOOTH, { Size = UDim2.new(1, 0, 0, h) })
-                    else
-                        tween(c, SMOOTH, { Size = UDim2.new(1, 0, 0, 56) })
-                    end
+                    listHolder.Visible = open
                     tween(arrow, QUICK, { Rotation = open and 180 or 0 })
                 end)
 
                 return {
-                    Set = function(v) value = v; valLbl.Text = tostring(v) end,
+                    Set = function(v) value = v; refreshLabel(); rebuild()
+                        if o.Callback then task.spawn(o.Callback, v) end end,
                     Get = function() return value end,
                     Refresh = function(newOpts, newDefault)
                         options = newOpts or {}
-                        if newDefault ~= nil then value = newDefault; valLbl.Text = tostring(newDefault) end
-                        rebuild()
+                        if newDefault ~= nil then value = newDefault end
+                        refreshLabel(); rebuild()
                     end,
                 }
             end
@@ -825,15 +998,16 @@ function Nemesis:CreateWindow(opts)
             -- ===== Input =====
             function Section:CreateInput(o)
                 o = o or {}
-                local c = card(56, o.Description ~= nil)
-                rowHead(c, o.Icon, o.Name or "Input")
-                descriptionBlock(c, o.Description)
+                local c, body = card()
+                local head = rowHead(body, o.Icon, o.Name or "Input")
+                description(body, o.Description)
                 local pill = new("Frame", {
-                    Size = UDim2.fromOffset(150, 28),
-                    Position = UDim2.new(1, -168, 0, 14),
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Size = UDim2.fromOffset(160, 28),
+                    Position = UDim2.new(1, -18, 0.5, 0),
                     BackgroundColor3 = Nemesis._theme.Surface2,
                     BorderSizePixel = 0,
-                    Parent = c,
+                    Parent = head,
                 })
                 corner(pill, 14)
                 stroke(pill, Nemesis._theme.Border, 1, 0.4)
@@ -855,6 +1029,10 @@ function Nemesis:CreateWindow(opts)
                     if o.Flag then Nemesis._flags[o.Flag] = box.Text end
                     if o.Callback then task.spawn(o.Callback, box.Text, enter) end
                 end)
+                registerFlag(o.Flag, function(v)
+                    box.Text = tostring(v)
+                    if o.Callback then task.spawn(o.Callback, box.Text, false) end
+                end, box.Text)
                 return { Set = function(v) box.Text = v end, Get = function() return box.Text end }
             end
 
@@ -863,29 +1041,28 @@ function Nemesis:CreateWindow(opts)
                 o = o or {}
                 local key = o.Default or Enum.KeyCode.Unknown
                 local listening = false
-                local c = card(56, o.Description ~= nil)
-                rowHead(c, o.Icon, o.Name or "Keybind")
-                descriptionBlock(c, o.Description)
+                local c, body = card()
+                local head = rowHead(body, o.Icon, o.Name or "Keybind")
+                description(body, o.Description)
 
                 local kbBox = new("TextLabel", {
+                    AnchorPoint = Vector2.new(1, 0.5),
                     Text = key.Name,
                     Font = Enum.Font.GothamMedium,
                     TextSize = 13,
                     TextColor3 = Nemesis._theme.Text,
                     BackgroundColor3 = Nemesis._theme.Surface2,
-                    Position = UDim2.new(1, -88, 0, 14),
-                    Size = UDim2.fromOffset(70, 28),
-                    Parent = c,
+                    Position = UDim2.new(1, -18, 0.5, 0),
+                    Size = UDim2.fromOffset(80, 28),
+                    Parent = head,
                 })
                 corner(kbBox, 14)
                 stroke(kbBox, Nemesis._theme.Border, 1, 0.4)
 
                 local hit = new("TextButton", {
-                    Text = "",
-                    BackgroundTransparency = 1,
+                    Text = "", BackgroundTransparency = 1,
                     Size = UDim2.new(1, 0, 0, 56),
-                    Parent = c,
-                    ZIndex = 2,
+                    Parent = c, ZIndex = 2,
                 })
                 bindTap(hit, function()
                     listening = true
@@ -908,7 +1085,10 @@ function Nemesis:CreateWindow(opts)
                     if gpe or listening then return end
                     if input.KeyCode == key and o.Callback then task.spawn(o.Callback, key) end
                 end)
-
+                registerFlag(o.Flag, function(k)
+                    key = k; kbBox.Text = k.Name
+                    if o.Callback then task.spawn(o.Callback, k) end
+                end, key)
                 return { Set = function(k) key = k; kbBox.Text = k.Name end, Get = function() return key end }
             end
 
@@ -917,28 +1097,35 @@ function Nemesis:CreateWindow(opts)
                 o = o or {}
                 local color = o.Default or Color3.fromRGB(255, 255, 255)
                 local open = false
-                local c = card(56, o.Description ~= nil)
-                rowHead(c, o.Icon, o.Name or "Color")
-                descriptionBlock(c, o.Description)
-                c.ClipsDescendants = true
+                local c, body = card()
+                local head = rowHead(body, o.Icon, o.Name or "Color")
+                description(body, o.Description)
 
                 local swatch = new("Frame", {
+                    AnchorPoint = Vector2.new(1, 0.5),
                     Size = UDim2.fromOffset(40, 28),
-                    Position = UDim2.new(1, -58, 0, 14),
+                    Position = UDim2.new(1, -18, 0.5, 0),
                     BackgroundColor3 = color,
                     BorderSizePixel = 0,
-                    Parent = c,
+                    Parent = head,
                 })
                 corner(swatch, 14)
                 stroke(swatch, Nemesis._theme.Border, 1, 0.4)
 
+                local panelHolder = new("Frame", {
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    Parent = body,
+                    Visible = false,
+                    LayoutOrder = 10,
+                })
+                padding(panelHolder, 0, 18, 14, 18)
                 local panel = new("Frame", {
-                    Size = UDim2.new(1, -36, 0, 130),
-                    Position = UDim2.new(0, 18, 0, 64),
+                    Size = UDim2.new(1, 0, 0, 130),
                     BackgroundColor3 = Nemesis._theme.Surface2,
                     BorderSizePixel = 0,
-                    Visible = false,
-                    Parent = c,
+                    Parent = panelHolder,
                 })
                 corner(panel, 10)
                 padding(panel, 10)
@@ -991,6 +1178,7 @@ function Nemesis:CreateWindow(opts)
                     if o.Callback then task.spawn(o.Callback, color) end
                 end
                 apply()
+                registerFlag(o.Flag, function(col) color = col; h, s, v = Color3.toHSV(col); apply() end, color)
 
                 local satDrag, hueDrag = false, false
                 sat.InputBegan:Connect(function(i)
@@ -1024,14 +1212,12 @@ function Nemesis:CreateWindow(opts)
                 })
                 bindTap(hit, function()
                     open = not open
-                    panel.Visible = open
-                    if open then tween(c, SMOOTH, { Size = UDim2.new(1, 0, 0, 210) })
-                    else tween(c, SMOOTH, { Size = UDim2.new(1, 0, 0, 56) }) end
+                    panelHolder.Visible = open
                 end)
                 return { Set = function(col) color = col; h, s, v = Color3.toHSV(col); apply() end, Get = function() return color end }
             end
 
-            -- ===== Stat (highlighted card) =====
+            -- ===== Stat =====
             function Section:CreateStat(o)
                 o = o or {}
                 local c = new("Frame", {
@@ -1044,15 +1230,14 @@ function Nemesis:CreateWindow(opts)
                 stroke(c, Nemesis._theme.Accent, 1, 0.3)
                 new("UIGradient", {
                     Color = ColorSequence.new(Nemesis._theme.Accent, Nemesis._theme.AccentDim),
-                    Transparency = NumberSequence.new(0.2, 0.5),
+                    Transparency = NumberSequence.new(0.15, 0.55),
                     Rotation = 90,
                     Parent = c,
                 })
                 local left = new("Frame", {
                     BackgroundTransparency = 1,
                     Position = UDim2.new(0, 18, 0, 10),
-                    Size = UDim2.new(1, -36, 0, 0),
-                    AutomaticSize = Enum.AutomaticSize.Y,
+                    Size = UDim2.new(1, -36, 0, 22),
                     Parent = c,
                 })
                 new("UIListLayout", {
@@ -1073,15 +1258,14 @@ function Nemesis:CreateWindow(opts)
                     AutomaticSize = Enum.AutomaticSize.X,
                     Parent = left,
                 })
-
                 local valueLbl = new("TextLabel", {
                     Text = tostring(o.Value or ""),
                     Font = Enum.Font.GothamBold,
-                    TextSize = 24,
+                    TextSize = 22,
                     TextColor3 = Color3.new(1, 1, 1),
                     TextXAlignment = Enum.TextXAlignment.Left,
                     BackgroundTransparency = 1,
-                    Position = UDim2.new(0, 18, 0, 38),
+                    Position = UDim2.new(0, 18, 0, 40),
                     Size = UDim2.new(1, -130, 0, 28),
                     Parent = c,
                 })
@@ -1092,11 +1276,10 @@ function Nemesis:CreateWindow(opts)
                     TextColor3 = Color3.new(1, 1, 1),
                     TextXAlignment = Enum.TextXAlignment.Right,
                     BackgroundTransparency = 1,
-                    Position = UDim2.new(1, -110, 0, 42),
+                    Position = UDim2.new(1, -110, 0, 44),
                     Size = UDim2.new(0, 92, 0, 20),
                     Parent = c,
                 })
-
                 return {
                     Set = function(v) valueLbl.Text = tostring(v) end,
                     SetTrend = function(t) trendLbl.Text = tostring(t) end,
@@ -1172,6 +1355,79 @@ function Nemesis:CreateWindow(opts)
         if #Window._tabs == 1 then activate() end
         return Tab
     end
+
+    -- Built-in settings flyout
+    local settingsPage
+    bindTap(settingsBtn, function()
+        if settingsPage and settingsPage.Visible then settingsPage.Visible = false; return end
+        if not settingsPage then
+            settingsPage = new("Frame", {
+                Position = UDim2.new(0, 0, 0, 110),
+                Size = UDim2.new(1, 0, 1, -118),
+                BackgroundColor3 = Nemesis._theme.Background,
+                BorderSizePixel = 0,
+                Parent = Window._main,
+                ZIndex = 5,
+            })
+            padding(settingsPage, 16)
+            local stack = new("Frame", {
+                Size = UDim2.fromScale(1, 1),
+                BackgroundTransparency = 1,
+                Parent = settingsPage,
+            })
+            listLayout(stack, 8)
+            new("TextLabel", {
+                Text = "Settings",
+                Font = Enum.Font.GothamBold,
+                TextSize = 18,
+                TextColor3 = Nemesis._theme.Text,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 26),
+                Parent = stack,
+            })
+            new("TextLabel", {
+                Text = "Theme accent",
+                Font = Enum.Font.Gotham,
+                TextSize = 13,
+                TextColor3 = Nemesis._theme.Muted,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 18),
+                Parent = stack,
+            })
+            local row = new("Frame", {
+                Size = UDim2.new(1, 0, 0, 36),
+                BackgroundTransparency = 1,
+                Parent = stack,
+            })
+            new("UIListLayout", {
+                FillDirection = Enum.FillDirection.Horizontal,
+                Padding = UDim.new(0, 8),
+                Parent = row,
+            })
+            local presets = {
+                Color3.fromRGB(46, 196, 132),
+                Color3.fromRGB(138, 92, 246),
+                Color3.fromRGB(232, 76, 92),
+                Color3.fromRGB(70, 130, 240),
+                Color3.fromRGB(240, 168, 60),
+            }
+            for _, col in ipairs(presets) do
+                local sw = new("TextButton", {
+                    Text = "",
+                    BackgroundColor3 = col,
+                    AutoButtonColor = false,
+                    Size = UDim2.fromOffset(36, 36),
+                    Parent = row,
+                })
+                corner(sw, 8)
+                stroke(sw, Nemesis._theme.Border, 1, 0.4)
+                bindTap(sw, function() Nemesis:SetTheme({ Accent = col }) end)
+            end
+        end
+        settingsPage.Visible = true
+    end)
 
     function Window:Destroy() screen:Destroy() end
     return Window

@@ -8,7 +8,7 @@ A UI library for Roblox executors. Mobile and desktop.
 
 ## Status
 
-In development. The first build is up and usable. API may change before v1.0.
+In development. The library is usable. API may change before v1.0.
 
 ## Install
 
@@ -20,29 +20,41 @@ local Nemesis = loadstring(game:HttpGet("https://raw.githubusercontent.com/siriu
 
 ```lua
 local Window = Nemesis:CreateWindow({
-    Name = "Nemesis",
-    Subtitle = "v0.1",
+    Name = "Example",
+    Subtitle = "v0.3",
     Keybind = Enum.KeyCode.RightShift,
 })
 
 local Tab = Window:CreateTab({ Name = "Main" })
-local Section = Tab:CreateSection({ Name = "Combat", Side = "Left" })
+local Section = Tab:CreateSection({ Name = "Gameplay" })
 
 Section:CreateToggle({
-    Name = "Auto Parry",
-    Flag = "AutoParry",
-    Default = false,
+    Name = "Auto Sprint",
+    Flag = "AutoSprint",
+    Default = true,
     Callback = function(state) end,
 })
 
 Section:CreateSlider({
-    Name = "Reach",
-    Min = 1, Max = 20, Default = 8,
-    Callback = function(value) end,
+    Name = "Walk Speed",
+    Min = 16, Max = 200, Default = 16,
+    Callback = function(v) end,
 })
 ```
 
-A full example lives in [example.lua](example.lua).
+## Examples
+
+| File | What it shows |
+|------|---------------|
+| [examples/basic.lua](examples/basic.lua)     | Smallest working window |
+| [examples/full.lua](examples/full.lua)       | Every element, configs, multi-select dropdown |
+| [examples/theming.lua](examples/theming.lua) | Custom theme override |
+
+Run any of them directly:
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/siriusxcontact/Nemesis/main/examples/full.lua"))()
+```
 
 ## Elements
 
@@ -58,28 +70,43 @@ A full example lives in [example.lua](example.lua).
 | Input       | `Section:CreateInput`   |
 | Keybind     | `Section:CreateKeybind` |
 | Colorpicker | `Section:CreateColorpicker` |
+| Stat        | `Section:CreateStat`    |
 | Label       | `Section:CreateLabel`   |
 | Paragraph   | `Section:CreateParagraph` |
-| Stat        | `Section:CreateStat`    |
 | Notify      | `Nemesis:Notify`        |
 
-Every interactive element returns an object with `:Set(value)` and `:Get()`. Every element accepts an optional `Icon` (unicode glyph or `rbxassetid://...`) and `Description` (muted helper text beneath the row).
+Every element accepts optional `Icon` (unicode glyph or `rbxassetid://...`), `Description` (muted helper text below the row), and `Flag` (unique key for save/load).
+
+Full reference: [docs/components.md](docs/components.md).
 
 ## Mobile
 
-On touch devices the window opens at a phone-friendly width and shows a draggable round toggle button. All elements respond to touch input the same way they respond to mouse input.
+Touch devices get a phone-friendly width, an iOS-style handle indicator, and a round draggable toggle button at the top-left. Every element responds to touch input the same way it responds to mouse.
+
+## Desktop
+
+Drag the header to move. Drag the grip at the bottom-right corner to resize. Press the configured keybind to hide and show.
 
 ## Theming
 
 ```lua
 Nemesis:SetTheme({
     Accent = Color3.fromRGB(138, 92, 246),
-    Background = Color3.fromRGB(16, 16, 20),
-    Surface = Color3.fromRGB(22, 22, 28),
-    Text = Color3.fromRGB(235, 235, 240),
 })
 ```
 
+The header gear opens a built-in theme preset picker.
+
+## Configs
+
+```lua
+Nemesis:SetConfigFolder("Nemesis/MyScript")
+Nemesis:SaveConfig("default")
+Nemesis:LoadConfig("default")
+```
+
+Every element with a `Flag` is captured. Requires executor functions `writefile`, `readfile`, `isfile`, `listfiles`, `makefolder`, `isfolder`.
+
 ## License
 
-MIT.
+MIT. See [LICENSE](LICENSE).
